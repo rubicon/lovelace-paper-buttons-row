@@ -1,22 +1,21 @@
-import { noChange } from "lit";
-import { deepEqual } from "./deep-equal";
-import {
-  AttributePart,
-  Directive,
-  directive,
-  DirectiveParameters
-} from "lit/directive.js";
 import {
   ActionHandlerDetail,
   ActionHandlerOptions,
-  fireEvent
+  fireEvent,
 } from "custom-card-helpers";
+import { noChange } from "lit";
+import {
+  AttributePart,
+  Directive,
+  DirectiveParameters,
+  directive,
+} from "lit/directive.js";
+import { deepEqual } from "./deep-equal";
 
 const isTouch =
   "ontouchstart" in window ||
   navigator.maxTouchPoints > 0 ||
-  // @ts-ignore
-  navigator.msMaxTouchPoints > 0;
+  navigator["msMaxTouchPoints"] > 0;
 
 export interface CustomActionHandlerOptions extends ActionHandlerOptions {
   disabled?: boolean;
@@ -35,7 +34,7 @@ interface IActionHandler extends HTMLElement {
   holdTime: number;
   bind: (
     element: ActionHandlerElement,
-    options?: CustomActionHandlerOptions
+    options?: CustomActionHandlerOptions,
   ) => void;
 }
 
@@ -87,7 +86,7 @@ class ActionHandler extends HTMLElement implements IActionHandler {
       height: isTouch ? "100px" : "50px",
       transform: "translate(-50%, -50%)",
       pointerEvents: "none",
-      zIndex: "999"
+      zIndex: "999",
     });
 
     this.appendChild(this.ripple);
@@ -100,8 +99,8 @@ class ActionHandler extends HTMLElement implements IActionHandler {
       "touchmove",
       "mousewheel",
       "wheel",
-      "scroll"
-    ].forEach(ev => {
+      "scroll",
+    ].forEach((ev) => {
       document.addEventListener(
         ev,
         () => {
@@ -116,14 +115,14 @@ class ActionHandler extends HTMLElement implements IActionHandler {
             }
           }
         },
-        { passive: true }
+        { passive: true },
       );
     });
   }
 
   public bind(
     element: ActionHandlerElement,
-    options: CustomActionHandlerOptions = {}
+    options: CustomActionHandlerOptions = {},
   ): void {
     if (
       element.actionHandler &&
@@ -133,14 +132,18 @@ class ActionHandler extends HTMLElement implements IActionHandler {
     }
 
     if (element.actionHandler) {
-      element.removeEventListener("touchstart", element.actionHandler.start!);
-      element.removeEventListener("touchend", element.actionHandler.end!);
-      element.removeEventListener("touchcancel", element.actionHandler.end!);
-
-      element.removeEventListener("mousedown", element.actionHandler.start!);
-      element.removeEventListener("click", element.actionHandler.end!);
-
-      element.removeEventListener("keyup", element.actionHandler.handleEnter!);
+      if (element.actionHandler.start) {
+        element.removeEventListener("touchstart", element.actionHandler.start);
+        element.removeEventListener("mousedown", element.actionHandler.start);
+      }
+      if (element.actionHandler.end) {
+        element.removeEventListener("touchend", element.actionHandler.end);
+        element.removeEventListener("touchcancel", element.actionHandler.end);
+        element.removeEventListener("click", element.actionHandler.end);
+      }
+      if (element.actionHandler.handleEnter) {
+        element.removeEventListener("keyup", element.actionHandler.handleEnter);
+      }
     } else {
       element.addEventListener("contextmenu", (ev: Event) => {
         const e = ev || window.event;
@@ -239,17 +242,17 @@ class ActionHandler extends HTMLElement implements IActionHandler {
       if (ev.keyCode !== 13) {
         return;
       }
-      (ev.currentTarget as ActionHandlerElement).actionHandler!.end!(ev);
+      (ev.currentTarget as ActionHandlerElement).actionHandler?.end?.(ev);
     };
 
     element.addEventListener("touchstart", element.actionHandler.start, {
-      passive: true
+      passive: true,
     });
     element.addEventListener("touchend", element.actionHandler.end);
     element.addEventListener("touchcancel", element.actionHandler.end);
 
     element.addEventListener("mousedown", element.actionHandler.start, {
-      passive: true
+      passive: true,
     });
     element.addEventListener("click", element.actionHandler.end);
 
@@ -260,7 +263,7 @@ class ActionHandler extends HTMLElement implements IActionHandler {
     Object.assign(this.style, {
       left: `${x}px`,
       top: `${y}px`,
-      display: null
+      display: null,
     });
     this.ripple.disabled = false;
     this.ripple.startPress();
@@ -280,12 +283,12 @@ const getActionHandler = (): ActionHandler => {
   const body = document.body;
   if (body.querySelector("paper-buttons-row-action-handler")) {
     return body.querySelector(
-      "paper-buttons-row-action-handler"
+      "paper-buttons-row-action-handler",
     ) as ActionHandler;
   }
 
   const actionHandler = document.createElement(
-    "paper-buttons-row-action-handler"
+    "paper-buttons-row-action-handler",
   );
   body.appendChild(actionHandler);
 
@@ -294,7 +297,7 @@ const getActionHandler = (): ActionHandler => {
 
 export const actionHandlerBind = (
   element: ActionHandlerElement,
-  options?: CustomActionHandlerOptions
+  options?: CustomActionHandlerOptions,
 ): void => {
   const actionHandler: ActionHandler = getActionHandler();
   if (!actionHandler) {
@@ -310,7 +313,7 @@ export const actionHandler = directive(
       return noChange;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    // eslint-disable-next-line @typescript-eslint/no-empty-function,@typescript-eslint/no-unused-vars
     render(_options?: CustomActionHandlerOptions) {}
-  }
+  },
 );

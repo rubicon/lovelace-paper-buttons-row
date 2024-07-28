@@ -1,7 +1,7 @@
-import { computeEntity, HomeAssistant } from "custom-card-helpers";
+import { HomeAssistant, computeEntity } from "custom-card-helpers";
 import { ButtonConfig } from "./types";
 
-export const computeStateName = stateObj => {
+export const computeStateName = (stateObj) => {
   if (stateObj.attributes && stateObj.attributes.friendly_name) {
     return stateObj.attributes.friendly_name;
   }
@@ -23,43 +23,43 @@ function computeActionTooltip(hass, state, config, isHold) {
       tooltip += `${hass.localize(
         "ui.panel.lovelace.cards.picture-elements.navigate_to",
         "location",
-        config.navigation_path
+        config.navigation_path,
       )}`;
       break;
     case "url":
       tooltip += `${hass.localize(
         "ui.panel.lovelace.cards.picture-elements.url",
         "url_path",
-        config.url_path
+        config.url_path,
       )}`;
       break;
     case "toggle":
       tooltip += `${hass.localize(
         "ui.panel.lovelace.cards.picture-elements.toggle",
         "name",
-        state
+        state,
       )}`;
       break;
     case "call-service":
       tooltip += `${hass.localize(
         "ui.panel.lovelace.cards.picture-elements.call_service",
         "name",
-        config.service
+        config.service,
       )}`;
       break;
     case "more-info":
       tooltip += `${hass.localize(
         "ui.panel.lovelace.cards.picture-elements.more_info",
         "name",
-        state
+        state,
       )}`;
       break;
   }
   return tooltip;
 }
 
-export const computeTooltip = (hass: HomeAssistant, config: ButtonConfig) => {
-  if (config.tooltip === false) {
+export const computeTooltip = (config: ButtonConfig, hass?: HomeAssistant) => {
+  if (!hass || config.tooltip === false) {
     return "";
   }
   if (config.tooltip) {

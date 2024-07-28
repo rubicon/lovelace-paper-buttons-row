@@ -1,6 +1,5 @@
-import { createEntityRow } from "card-tools/src/lovelace-element";
 import { provideHass } from "card-tools/src/hass";
-import { fireEvent, HomeAssistant } from "custom-card-helpers";
+import { HomeAssistant, createThing, fireEvent } from "custom-card-helpers";
 import { LitElement, PropertyValues } from "lit";
 import { ExternalPaperButtonRowConfig } from "./types";
 
@@ -12,7 +11,7 @@ interface LovelaceElement extends LitElement {
 
 type FirstUpdatedFn = (
   this: LovelaceElement,
-  changedProperties: PropertyValues
+  changedProperties: PropertyValues,
 ) => void;
 
 export function createModule(element: string, firstUpdated: FirstUpdatedFn) {
@@ -34,18 +33,30 @@ createModule("hui-generic-entity-row", function () {
     const pbConfig = this.config
       .extend_paper_buttons_row as ExternalPaperButtonRowConfig;
 
-    const paperButtons = createEntityRow({
-      type: "custom:paper-buttons-row",
-      ...pbConfig
-    });
+    const paperButtons = createThing(
+      {
+        type: "custom:paper-buttons-row",
+        ...pbConfig,
+      },
+      true,
+    );
 
     provideHass(paperButtons);
 
-    let el: Element | null | undefined = this.shadowRoot.querySelector("slot");
+    let el = this.shadowRoot.querySelector<HTMLElement>("slot");
     if (!el) return;
 
     if (el.parentElement) {
-      if (el.parentElement.classList.contains("text-content")) {
+      if (el.parentElement.parentElement) {
+        if (
+          el.parentElement.classList.contains("state") &&
+          el.parentElement.parentElement.classList.contains("text-content")
+        ) {
+          el = el.parentElement.parentElement;
+        } else {
+          console.error("unexpected parent node found");
+        }
+      } else if (el.parentElement.classList.contains("text-content")) {
         el = el.parentElement;
       } else {
         console.error("unexpected parent node found");
@@ -53,12 +64,11 @@ createModule("hui-generic-entity-row", function () {
     }
 
     if (pbConfig.hide_state) {
-      (el as HTMLElement).style.display = "none";
+      el.style.display = "none";
     }
 
     if (pbConfig.hide_badge) {
-      const el: HTMLElement | null =
-        this.shadowRoot.querySelector("state-badge");
+      const el = this.shadowRoot.querySelector<HTMLElement>("state-badge");
       if (el) {
         el.style.visibility = "hidden";
         el.style.marginLeft = "-48px";

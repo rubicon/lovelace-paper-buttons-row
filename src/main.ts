@@ -1,59 +1,68 @@
-import { html, LitElement, PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
-import { styleMap, StyleInfo } from "lit/directives/style-map.js";
-import { handleAction, hasAction } from "./action";
 import { hass } from "card-tools/src/hass";
 import {
+  ActionHandlerEvent,
+  HomeAssistant,
+  computeDomain,
+  stateIcon,
+} from "custom-card-helpers";
+import deepmerge from "deepmerge";
+import { HassEntity } from "home-assistant-js-websocket";
+import { LitElement, PropertyValues, html, unsafeCSS } from "lit";
+import { customElement, property } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
+import { StyleInfo, styleMap } from "lit/directives/style-map.js";
+import { handleAction, hasAction } from "./action";
+import { actionHandler } from "./action-handler";
+import {
   DOMAINS_TOGGLE,
-  STATE_UNAVAILABLE,
   STATES_ON,
-  TEMPLATE_OPTIONS
+  STATE_OFF,
+  STATE_ON,
+  STATE_UNAVAILABLE,
+  TEMPLATE_OPTIONS,
 } from "./const";
 import { computeStateName, computeTooltip } from "./entity";
-import { name, version } from "../package.json";
-import deepmerge from "deepmerge";
-import { actionHandler } from "./action-handler";
-import "./entity-row";
+import { handleButtonPreset } from "./presets";
+import styles from "./styles.css?inline";
 import { renderTemplateObjects, subscribeTemplate } from "./template";
-import {
-  ActionHandlerEvent,
-  computeDomain,
-  HomeAssistant,
-  stateIcon
-} from "custom-card-helpers";
 import {
   ButtonConfig,
   ExternalButtonConfig,
   ExternalButtonType,
   ExternalPaperButtonRowConfig,
   PaperButtonRowConfig,
-  StyleConfig
+  StyleConfig,
 } from "./types";
-import { HassEntity } from "home-assistant-js-websocket";
-import styles from "./styles.css";
 import { arrayToObject } from "./utils";
+import "./entity-row";
 
-console.info(
-  `%c ${name.toUpperCase()} %c ${version} `,
-  `color: white; background: #039be5; font-weight: 700;`,
-  `color: #039be5; background: white; font-weight: 700;`
+console.groupCollapsed(
+  `%c ${__NAME__} %c ${__VERSION__} `,
+  "color: white; background: #039be5; font-weight: 700;",
+  "color: #039be5; background: white; font-weight: 700;",
 );
+console.info(`branch   : ${__BRANCH__}`);
+console.info(`commit   : ${__COMMIT__}`);
+console.info(`built at : ${__BUILD_TIME__}`);
+console.info("https://github.com/jcwillox/lovelace-paper-buttons-row");
+console.groupEnd();
 
-const computeStateIcon = config => {
-  return config.state_icons && config.state_icons[config.state.toLowerCase()];
+const computeStateIcon = (config: ButtonConfig) => {
+  if (config.state_icons && typeof config.state == "string")
+    return config.state_icons[config.state.toLowerCase()];
+  return undefined;
 };
 
-const computeStateText = config => {
-  return (
-    (config.state_text && config.state_text[config.state.toLowerCase()]) ||
-    config.state
-  );
+const computeStateText = (config: ButtonConfig) => {
+  if (config.state_text && typeof config.state == "string")
+    return config.state_text[config.state.toLowerCase()] || config.state;
+  return config.state;
 };
 
-const migrateIconAlignment = alignment => {
+const migrateIconAlignment = (alignment: string) => {
   console.warn(
-    name,
-    "'align_icon' and 'align_icons' is deprecated and will be removed in a future version"
+    __NAME__,
+    "'align_icon' and 'align_icons' is deprecated and will be removed in a future version",
   );
   switch (alignment) {
     case "top":
@@ -69,7 +78,7 @@ const migrateIconAlignment = alignment => {
 
 @customElement("paper-buttons-row")
 export class PaperButtonsRow extends LitElement {
-  static readonly styles = [styles];
+  static readonly styles = unsafeCSS(styles);
 
   @property() private hass?: HomeAssistant;
   @property() private _config?: PaperButtonRowConfig;
@@ -79,7 +88,7 @@ export class PaperButtonsRow extends LitElement {
 
   // convert an externally set config to the correct internal structure
   private _transformConfig(
-    config: ExternalPaperButtonRowConfig
+    config: ExternalPaperButtonRowConfig,
   ): PaperButtonRowConfig {
     // check valid config
     if (!config) throw new Error("Invalid configuration");
@@ -93,9 +102,9 @@ export class PaperButtonsRow extends LitElement {
     config = JSON.parse(JSON.stringify(config));
 
     // ensure we always have 1 row
-    if (config.buttons.every(item => !Array.isArray(item))) {
+    if (config.buttons.every((item) => !Array.isArray(item))) {
       config.buttons = [config.buttons as Array<ExternalButtonType>];
-    } else if (!config.buttons.every(item => Array.isArray(item))) {
+    } else if (!config.buttons.every((item) => Array.isArray(item))) {
       throw new Error("Cannot mix rows and buttons");
     }
 
@@ -110,8 +119,8 @@ export class PaperButtonsRow extends LitElement {
     }
 
     config.buttons = (config.buttons as Array<Array<ExternalButtonType>>).map(
-      row => {
-        return row.map(bConfig => {
+      (row) => {
+        return row.map((bConfig) => {
           // handle when config is not defined as a dictionary.
           if (typeof bConfig === "string") {
             bConfig = { entity: bConfig };
@@ -123,9 +132,14 @@ export class PaperButtonsRow extends LitElement {
           if (typeof bConfig.layout === "string") {
             bConfig.layout = bConfig.layout
               .split("|")
-              .map(column =>
-                column.includes("_") ? column.split("_") : column
+              .map((column) =>
+                column.includes("_") ? column.split("_") : column,
               );
+          }
+
+          // ensure active is a list
+          if (typeof bConfig.active === "string") {
+            bConfig.active = [bConfig.active];
           }
 
           // migrate `style` to `styles`
@@ -146,7 +160,7 @@ export class PaperButtonsRow extends LitElement {
             for (const stateKey in bConfig.state_styles) {
               for (const key in bConfig.state_styles[stateKey]) {
                 bConfig.state_styles[stateKey][key] = arrayToObject(
-                  bConfig.state_styles[stateKey][key]
+                  bConfig.state_styles[stateKey][key],
                 );
               }
             }
@@ -157,7 +171,7 @@ export class PaperButtonsRow extends LitElement {
 
           return bConfig;
         });
-      }
+      },
     );
 
     return config as PaperButtonRowConfig;
@@ -172,23 +186,25 @@ export class PaperButtonsRow extends LitElement {
     this._templates = [];
 
     // fix config.
-    this._config.buttons.map(row => {
-      return row.map(config => {
+    this._config.buttons = this._config.buttons.map((row) => {
+      return row.map((config) => {
+        config = handleButtonPreset(config, this._config);
+
         // create list of entities to monitor for changes.
         if (config.entity) {
           this._entities?.push(config.entity);
         }
 
         // subscribe template options
-        TEMPLATE_OPTIONS.forEach(key =>
-          subscribeTemplate.call(this, config, config, key)
+        TEMPLATE_OPTIONS.forEach((key) =>
+          subscribeTemplate.call(this, config, config, key),
         );
 
         // subscribe template styles
-        Object.values(config.styles).forEach(styles => {
+        Object.values(config.styles).forEach((styles) => {
           if (typeof styles === "object")
-            Object.keys(styles).forEach(key =>
-              subscribeTemplate.call(this, config, styles, key)
+            Object.keys(styles).forEach((key) =>
+              subscribeTemplate.call(this, config, styles, key),
             );
         });
 
@@ -205,44 +221,65 @@ export class PaperButtonsRow extends LitElement {
     renderTemplateObjects(this._templates, this.hass);
 
     return html`
-      ${this._config!.extra_styles
+      ${this._config.extra_styles
         ? html`
             <style>
-              ${this._config!.extra_styles}
+              ${this._config.extra_styles}
             </style>
           `
         : ""}
-      ${this._config.buttons.map(row => {
+      ${this._config.buttons.map((row) => {
         return html`
           <div
             class="flex-box"
-            style="${styleMap(this._config!.styles as StyleInfo)}"
+            style="${styleMap(this._config?.styles as StyleInfo)}"
           >
-            ${row.map(config => {
+            ${row.map((config) => {
               const stateObj =
                 (config.entity != undefined &&
-                  this.hass!.states[config.entity]) ||
+                  this.hass?.states[config.entity]) ||
                 undefined;
+              const domain = config.entity && computeDomain(config.entity);
               const styles = this._getStyles(config);
+              const buttonStyles = {
+                ...this._getBaseStyles(),
+                ...this._getStateStyles(domain, stateObj),
+                ...(styles.button || {}),
+              } as StyleInfo;
+
+              const activeStates = config.active
+                ? new Set(config.active)
+                : STATES_ON;
 
               return html`
                 <paper-button
-                  @action="${ev => this._handleAction(ev, config)}"
+                  @action="${(ev: ActionHandlerEvent) =>
+                    this._handleAction(ev, config)}"
                   .actionHandler="${actionHandler({
                     hasHold: hasAction(config.hold_action),
                     hasDoubleClick: hasAction(config.double_tap_action),
-                    repeat: config.hold_action?.repeat
+                    repeat: config.hold_action?.repeat,
                   })}"
-                  style="${styleMap((styles.button || {}) as StyleInfo)}"
-                  class="${this._getClass(stateObj?.state)}"
-                  title="${computeTooltip(this.hass!, config)}"
+                  style="${styleMap(buttonStyles)}"
+                  class="${this._getClass(
+                    activeStates,
+                    config.state,
+                    stateObj?.state,
+                  )}"
+                  title="${computeTooltip(config, this.hass)}"
+                  data-domain="${ifDefined(domain)}"
+                  data-entity-state="${ifDefined(stateObj?.state)}"
+                  data-state="${ifDefined(
+                    typeof config.state === "string" &&
+                      config.state.toLowerCase(),
+                  )}"
                 >
-                  ${config.layout!.map(column => {
+                  ${config.layout?.map((column) => {
                     if (Array.isArray(column))
                       return html`
                         <div class="flex-column">
-                          ${column.map(row =>
-                            this.renderElement(row, config, styles, stateObj)
+                          ${column.map((row) =>
+                            this.renderElement(row, config, styles, stateObj),
                           )}
                         </div>
                       `;
@@ -264,12 +301,12 @@ export class PaperButtonsRow extends LitElement {
   }
 
   renderElement(
-    item,
+    item: string,
     config: ButtonConfig,
-    styles?: StyleConfig,
-    entity?: HassEntity
+    styles: StyleConfig,
+    entity?: HassEntity,
   ) {
-    const style = (styles || {})[item] || {};
+    const style: StyleInfo = styles?.[item] || {};
     switch (item) {
       case "icon":
         return this.renderIcon(config, style, entity);
@@ -280,7 +317,7 @@ export class PaperButtonsRow extends LitElement {
     }
   }
 
-  renderIcon(config: ButtonConfig, style, entity?: HassEntity) {
+  renderIcon(config: ButtonConfig, style: StyleInfo, entity?: HassEntity) {
     const icon =
       config.icon !== false && (config.icon || config.entity)
         ? computeStateIcon(config) ||
@@ -293,13 +330,14 @@ export class PaperButtonsRow extends LitElement {
           src="${config.image}"
           class="image"
           style="${styleMap(style)}"
+          alt="icon"
         />`
       : icon
-      ? html` <ha-icon style="${styleMap(style)}" .icon="${icon}" />`
-      : "";
+        ? html` <ha-icon style="${styleMap(style)}" .icon="${icon}" />`
+        : "";
   }
 
-  renderName(config: ButtonConfig, style, stateObj?: HassEntity) {
+  renderName(config: ButtonConfig, style: StyleInfo, stateObj?: HassEntity) {
     return config.name !== false && (config.name || config.entity)
       ? html`
           <span style="${styleMap(style)}">
@@ -309,7 +347,7 @@ export class PaperButtonsRow extends LitElement {
       : "";
   }
 
-  renderState(config: ButtonConfig, style) {
+  renderState(config: ButtonConfig, style: StyleInfo) {
     return config.state !== false
       ? html`
           <span style="${styleMap(style)}"> ${computeStateText(config)} </span>
@@ -323,17 +361,91 @@ export class PaperButtonsRow extends LitElement {
     }
   }
 
-  _getClass(state?: string) {
-    if (!state) return "";
-    if (STATES_ON.has(state)) {
+  _getClass(
+    activeStates: Set<string>,
+    state?: ButtonConfig["state"],
+    entityState?: string,
+  ) {
+    if (typeof state == "string" && activeStates.has(state.toLowerCase())) {
       return "button-active";
-    } else if (STATE_UNAVAILABLE === state) {
+    } else if (STATE_UNAVAILABLE === entityState) {
       return "button-unavailable";
     }
     return "";
   }
 
+  _getBaseStyles(): StyleInfo {
+    const hex = getComputedStyle(this).getPropertyValue("--state-icon-color");
+    return {
+      "--rgb-state-default-color": this._hexToRgb(hex)?.join(", "),
+    };
+  }
+
+  _getStateStyles(domain?: string, stateObj?: HassEntity): StyleInfo {
+    if (!domain || !stateObj) return {};
+
+    if (stateObj.attributes.rgb_color) {
+      return {
+        "--pbs-button-rgb-state-color": stateObj.attributes.rgb_color,
+      };
+    } else {
+      const rgb = this._getStateColor(stateObj, domain);
+      if (rgb) {
+        return {
+          "--pbs-button-rgb-state-color": rgb.join(", "),
+        };
+      }
+    }
+
+    return {};
+  }
+
+  _getStateColor = (stateObj: HassEntity, domain?: string) => {
+    const styles = getComputedStyle(this);
+
+    // from `device_class`
+    if (stateObj.attributes.device_class) {
+      const hex = styles.getPropertyValue(
+        `--state-${domain}-${stateObj.attributes.device_class}-${stateObj.state}-color`,
+      );
+      if (hex) {
+        return this._hexToRgb(hex);
+      }
+    }
+
+    // from `state`
+    let hex = styles.getPropertyValue(
+      `--state-${domain}-${stateObj.state}-color`,
+    );
+    if (hex) return this._hexToRgb(hex);
+
+    // from `domain`
+    if (stateObj.state === STATE_ON || stateObj.state === STATE_OFF) {
+      const active = stateObj.state === STATE_ON ? "active" : "inactive";
+
+      hex = styles.getPropertyValue(`--state-${domain}-${active}-color`);
+      if (hex) return this._hexToRgb(hex);
+
+      if (stateObj.state === STATE_ON) {
+        hex = styles.getPropertyValue("--state-active-color");
+        if (hex) return this._hexToRgb(hex);
+      }
+    }
+  };
+
+  _hexToRgb(hex: string) {
+    return hex.match(/[A-Za-z0-9]{2}/g)?.map((v) => parseInt(v, 16));
+  }
+
   _getRippleClass(config: ButtonConfig) {
+    switch (config.ripple) {
+      case "none":
+        return "hidden";
+      case "circle":
+        return "circle";
+      case "fill":
+        return "";
+    }
     if (config.layout?.length === 1 && config.layout[0] === "icon") {
       return "circle";
     }
@@ -361,7 +473,7 @@ export class PaperButtonsRow extends LitElement {
 
   _defaultConfig(
     config: ExternalPaperButtonRowConfig,
-    bConfig: ExternalButtonConfig
+    bConfig: ExternalButtonConfig,
   ) {
     if (!bConfig.layout) {
       // migrate align_icon to layout
@@ -370,15 +482,18 @@ export class PaperButtonsRow extends LitElement {
       else bConfig.layout = ["icon", "name"];
     }
 
+    // default state template
     if (!bConfig.state && bConfig.entity) {
       bConfig.state = { case: "upper" };
     }
 
     if (bConfig.entity) {
       const domain = computeDomain(bConfig.entity);
+      // default hold action
       if (!bConfig.hold_action) {
         bConfig.hold_action = { action: "more-info" };
       }
+      // default tap action
       if (!bConfig.tap_action) {
         if (DOMAINS_TOGGLE.has(domain)) {
           bConfig.tap_action = { action: "toggle" };
@@ -387,8 +502,8 @@ export class PaperButtonsRow extends LitElement {
             action: "call-service",
             service: "scene.turn_on",
             service_data: {
-              entity_id: bConfig.entity
-            }
+              entity_id: bConfig.entity,
+            },
           };
         } else {
           bConfig.tap_action = { action: "more-info" };
@@ -409,7 +524,7 @@ export class PaperButtonsRow extends LitElement {
       }
       // only update if monitored entity changed state.
       return this._entities.some(
-        entity => oldHass.states[entity] !== this.hass!.states[entity]
+        (entity) => oldHass.states[entity] !== this.hass?.states[entity],
       );
     }
     return false;

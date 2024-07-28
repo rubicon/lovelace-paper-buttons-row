@@ -6,6 +6,12 @@ declare global {
   interface HTMLElementTagNameMap {
     "hui-error-card": LovelaceCard;
   }
+
+  const __NAME__: string;
+  const __BRANCH__: string;
+  const __COMMIT__: string;
+  const __VERSION__: string;
+  const __BUILD_TIME__: string;
 }
 
 export interface TemplateConfig {
@@ -18,17 +24,22 @@ export interface TemplateConfig {
 
 export type Template = string | TemplateConfig;
 
-export type StyleConfig = Record<
-  "button" | "icon" | "name" | "state" | "ripple",
-  Record<string, string | Template>
+export type StyleConfig = Partial<
+  Record<
+    "button" | "icon" | "name" | "state" | "ripple",
+    Record<string, string | Template>
+  >
 >;
 
 export interface ButtonConfig {
   entity?: string;
   name?: string | false | Template;
-  state?: string | Template;
-  icon?: string | Template;
+  state?: false | string | Template;
+  icon?: false | string | Template;
   image?: string | Template;
+  preset?: string;
+  active?: string[];
+  ripple?: "fill" | "none" | "circle";
   layout?: Array<string | Array<string>>;
   align_icon?: "top" | "left" | "right" | "bottom"; // deprecated
   tooltip?: string | false;
@@ -43,6 +54,7 @@ export interface ButtonConfig {
 
 export interface PaperButtonRowConfig {
   type?: string;
+  preset?: string;
   buttons: ButtonConfig[][];
   align_icons?: "top" | "left" | "right" | "bottom";
   base_config?: ButtonConfig;
@@ -54,8 +66,9 @@ export interface PaperButtonRowConfig {
 }
 
 export interface ExternalButtonConfig
-  extends Omit<ButtonConfig, "layout" | "style" | "styles"> {
+  extends Omit<ButtonConfig, "layout" | "active" | "style" | "styles"> {
   layout?: string | Array<string | Array<string>>;
+  active?: string | string[];
   style?: StyleConfig;
   styles?: StyleConfig;
 }
